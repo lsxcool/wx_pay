@@ -12,6 +12,7 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => {
   res.status(200).json({ ok: true });
+});
 
 // 支付结果回调（与 CALLBACK_PATH 一致，如 /pay-notify）
 app.use('/', payNotifyRouter);
