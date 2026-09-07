@@ -1,122 +1,47 @@
-# wxcloudrun-express
+# 微信云托管支付服务 (wx_pay)
 
-[![GitHub license](https://img.shields.io/github/license/WeixinCloud/wxcloudrun-express)](https://github.com/WeixinCloud/wxcloudrun-express)
-![GitHub package.json dependency version (prod)](https://img.shields.io/github/package-json/dependency-version/WeixinCloud/wxcloudrun-express/express)
-![GitHub package.json dependency version (prod)](https://img.shields.io/github/package-json/dependency-version/WeixinCloud/wxcloudrun-express/sequelize)
+Node.js + Express 项目，用于在微信云托管中提供统一下单与支付回调，可直接部署到云托管。
 
-微信云托管 Node.js Express 框架模版，实现简单的计数器读写接口，使用云托管 MySQL 读写、记录计数值。
-
-![](https://qcloudimg.tencent-cloud.cn/raw/be22992d297d1b9a1a5365e606276781.png)
-
-## 快速开始
-
-前往 [微信云托管快速开始页面](https://cloud.weixin.qq.com/cloudrun/onekey)，选择相应语言的模板，根据引导完成部署。
-
-## 本地调试
-下载代码在本地调试，请参考[微信云托管本地调试指南](https://developers.weixin.qq.com/miniprogram/dev/wxcloudrun/src/guide/debug/)
-
-## 实时开发
-代码变动时，不需要重新构建和启动容器，即可查看变动后的效果。请参考[微信云托管实时开发指南](https://developers.weixin.qq.com/miniprogram/dev/wxcloudrun/src/guide/debug/dev.html)
-
-## Dockerfile最佳实践
-请参考[如何提高项目构建效率](https://developers.weixin.qq.com/miniprogram/dev/wxcloudrun/src/scene/build/speed.html)
-
-## 项目结构说明
+## 本地结构
 
 ```
-.
-├── Dockerfile
-├── README.md
-├── container.config.json
-├── db.js
-├── index.js
-├── index.html
+wx_pay/
+├── app.js              # 入口，注册路由
 ├── package.json
+├── Dockerfile          # 云托管构建用
+├── .gitignore
+├── README.md
+└── routes/
+    ├── order.js        # 历史下单路由，当前不注册（避免前端传金额）
+    ├── payNotify.js    # POST /pay-notify 支付结果回调
+    └── refundNotify.js # POST /refund-notify 退款结果回调
 ```
 
-- `index.js`：项目入口，实现主要的读写 API
-- `db.js`：数据库相关实现，使用 `sequelize` 作为 ORM
-- `index.html`：首页代码
-- `package.json`：Node.js 项目定义文件
-- `container.config.json`：模板部署「服务设置」初始化配置（二开请忽略）
-- `Dockerfile`：容器配置文件
+## 环境变量（云托管控制台配置）
 
-## 服务 API 文档
+| 变量名 | 说明 | 示例 |
+|--------|------|------|
+| SUB_MCH_ID | 微信支付商户号 | 1900000109 |
+| ENV_ID | 云托管环境 ID | prod-2g8kxxxxxx |
+| CALLBACK_SERVICE | 当前云托管支付服务名称（`createRegistrationAndOrder` 使用；也兼容旧的 `SERVICE_NAME`） | pay-service |
+| CALLBACK_PATH | 支付回调路径，与代码中一致 | /pay-notify |
+| PROCESS_PAYMENT_CALLBACK_URL | processPaymentCallback 云函数 HTTP 触发器地址（支付成功后更新订单/报名状态） | 云开发控制台为该云函数开通 HTTP 触发器后得到的 URL |
+| PROCESS_REFUND_CALLBACK_URL | processRefundCallback 云函数 HTTP 触发器地址（退款最终结果更新票数和参与者头像） | 云开发控制台为该云函数开通 HTTP 触发器后得到的 URL |
 
-### `GET /api/count`
+## 接口说明
 
-获取当前计数
+- 下单统一由 `createRegistrationAndOrder` 云函数完成，票价与总金额仅由服务端从活动数据计算；云托管不再暴露可由前端传入金额的下单接口。
 
-#### 请求参数
+- **POST /pay-notify**  
+  微信支付异步通知，必须返回 `{ errcode: 0, errmsg: "success" }`。
 
-无
+- **POST /refund-notify**  
+  微信退款异步通知；转发到 `processRefundCallback` 成功后才返回成功，避免业务处理失败时丢失微信重试。
 
-#### 响应结果
+## 部署
 
-- `code`：错误码
-- `data`：当前计数值
+1. 在云托管控制台创建服务（如 pay-service），选择 Node.js/自定义镜像或上传代码。
+2. 配置上述环境变量。
+3. 通过 Git 或代码包上传本目录，构建并发布版本。
 
-##### 响应结果示例
-
-```json
-{
-  "code": 0,
-  "data": 42
-}
-```
-
-#### 调用示例
-
-```
-curl https://<云托管服务域名>/api/count
-```
-
-### `POST /api/count`
-
-更新计数，自增或者清零
-
-#### 请求参数
-
-- `action`：`string` 类型，枚举值
-  - 等于 `"inc"` 时，表示计数加一
-  - 等于 `"clear"` 时，表示计数重置（清零）
-
-##### 请求参数示例
-
-```
-{
-  "action": "inc"
-}
-```
-
-#### 响应结果
-
-- `code`：错误码
-- `data`：当前计数值
-
-##### 响应结果示例
-
-```json
-{
-  "code": 0,
-  "data": 42
-}
-```
-
-#### 调用示例
-
-```
-curl -X POST -H 'content-type: application/json' -d '{"action": "inc"}' https://<云托管服务域名>/api/count
-```
-
-## 使用注意
-如果不是通过微信云托管控制台部署模板代码，而是自行复制/下载模板代码后，手动新建一个服务并部署，需要在「服务设置」中补全以下环境变量，才可正常使用，否则会引发无法连接数据库，进而导致部署失败。
-- MYSQL_ADDRESS
-- MYSQL_PASSWORD
-- MYSQL_USERNAME
-以上三个变量的值请按实际情况填写。如果使用云托管内MySQL，可以在控制台MySQL页面获取相关信息。
-
-
-## License
-
-[MIT](./LICENSE)
+本地调试：`npm install && npm start`，默认端口 80（可用 `PORT=3000 npm start`）。
